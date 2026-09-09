@@ -383,7 +383,113 @@ ToolMessage
 AIMessage
     "The square root of 467 is approximately 21.59."
 ```
+---
 
+## Microsoft Agent Framework Example
+
+The following C# example demonstrates the equivalent tool-calling workflow using the Microsoft Agent Framework.
+
+The tool is defined as a standard C# method, converted into an `AIFunction`, registered in `AgentOptions`, and then provided to a `ChatAgent`.
+
+```csharp
+using Microsoft.Extensions.AI;
+using Microsoft.Agents.Extensions;
+
+// 1. Define your tool as a standard C# method with a description.
+[AIFunction("Gets the current weather for a given city")]
+public string GetWeather(string city)
+{
+    // Replace with an actual weather API call if needed.
+    if (city.Equals("Seattle", StringComparison.OrdinalIgnoreCase))
+    {
+        return "The weather in Seattle is rainy and 55°F.";
+    }
+
+    return $"The weather in {city} is sunny and 72°F.";
+}
+
+// 2. Wrap the method into an AIFunction tool.
+var weatherTool = AIFunctionFactory.Create(GetWeather);
+
+// 3. Register the tool when initializing the agent.
+var agentOptions = new AgentOptions
+{
+    Tools = [weatherTool]
+};
+
+// 4. Create the agent inside the application process.
+var agent = new ChatAgent(
+    "WeatherAgent",
+    agentOptions
+);
+```
+
+### Microsoft Agent Framework Concepts
+
+| Concept | Description |
+|---|---|
+| Tool method | A normal C# method that performs an action or retrieves data |
+| `AIFunction` | Provides a description of the method for the AI model |
+| `AIFunctionFactory.Create(...)` | Converts the C# method into a callable AI tool |
+| `AgentOptions.Tools` | Registers tools that the agent can use |
+| `ChatAgent` | Represents the configured agent running inside the application |
+
+### Microsoft Tool-Calling Flow
+
+```text
+User request
+    ↓
+ChatAgent receives the request
+    ↓
+The model decides whether to call GetWeather
+    ↓
+AIFunction invokes the C# method
+    ↓
+The weather result is returned to the model
+    ↓
+The agent produces the final response
+```
+
+### Important Notes
+
+- The `GetWeather` method must be defined inside a valid C# class or application type.
+- The method description helps the model understand when the tool should be used.
+- The method can be replaced with a real weather-service API call.
+- Tool registration is performed through `AgentOptions`.
+- The tool executes inside the application's process.
+
+---
+
+## Microsoft Agent Framework Packages
+
+Add the following packages or namespaces to the package section:
+
+| Package or namespace | Usage |
+|---|---|
+| `Microsoft.Extensions.AI` | Provides AI abstractions such as `AIFunction` and `AIFunctionFactory` |
+| `Microsoft.Agents.Extensions` | Provides Microsoft Agent Framework extensions such as agent configuration and `ChatAgent` |
+| `System` | Provides standard C# functionality such as `StringComparison` |
+
+Example imports:
+
+```csharp
+using Microsoft.Extensions.AI;
+using Microsoft.Agents.Extensions;
+```
+
+---
+
+## LangChain and Microsoft Agent Framework Comparison
+
+| Capability | LangChain | Microsoft Agent Framework |
+|---|---|---|
+| Tool definition | Python function with `@tool` | C# method with `AIFunction` |
+| Tool description | Function docstring or decorator description | Attribute or function metadata |
+| Tool wrapper | LangChain tool object | `AIFunctionFactory.Create(...)` |
+| Tool registration | `tools=[...]` in `create_agent` | `AgentOptions.Tools` |
+| Agent creation | `create_agent(...)` | `new ChatAgent(...)` |
+| Tool invocation | `tool.invoke({...})` | Method invocation through `AIFunction` |
+| Debugging | Inspect `messages` and `tool_calls` | Inspect agent/tool execution and application logs |
 ---
 
 ## Key Packages Used
