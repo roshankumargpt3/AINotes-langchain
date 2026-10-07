@@ -1,62 +1,46 @@
-1. Ingestion Layer
-PDFs uploaded to Object Storage (S3 / GCS / Azure Blob)
-Metadata stored:
-doc_id
-source
-upload_time
-checksum (SHA-256)
-➡️ Enables deduplication & retries
+# Enterprise Retrieval-Augmented Generation (RAG) Pipeline on Azure
+**Scale: 10,000 PDFs per day**
 
-2. Orchestration & Scaling
-Use workflow orchestrator
-Airflow / Temporal / Step Functions
-Batch PDFs into micro-batches (e.g., 100–200 docs)
-Parallel workers for:
-Text extraction
-Chunking
-Embedding
-✔ Handles 10k/day without overloading downstream systems
+This architecture is a batch and event-driven pipeline designed on Microsoft Azure to reliably extract, chunk, embed, and index 10,000 PDFs daily for Retrieval-Augmented Generation (RAG).
 
-3. PDF Processing
-Extract text using:
-PDFPlumber / Tika / OCR (fallback)
-Normalize text:
-Remove headers/footers
-Fix encoding
-Chunk text (semantic or token-based)
+---
 
-4. Deduplication Strategy
-Two layers of deduplication:
-A. Document-level
-Hash full PDF content
-If hash already exists → skip ingestion
-B. Chunk-level
-Hash normalized chunk text
-Prevent duplicate embeddings across documents
-➡️ Saves storage + embedding cost
+## 1. Ingestion Layer
+* **Azure Blob Storage**: Serves as the primary object store (landing container) where raw PDFs are uploaded.
+* **Azure Cosmos DB or Azure SQL Database**: Immediately stores document-level metadata (`doc_id`, `source`, `upload_time`, and `checksum SHA-256`) to maintain an ingestion record before heavy processing begins.
 
-5. Embedding & Indexing
-Generate embeddings (OpenAI / HF / Cohere)
-Store in:
-Vector DB (Pinecone / Weaviate / FAISS)
-Store raw text + metadata in:
-SQL / NoSQL store
+## 2. Orchestration & Scaling
+* **Orchestrator Options**:
+  * **Azure Durable Functions**: Best for code-first, stateful event-driven workflows that track long-running tasks.
+  * **Azure Data Factory (ADF)**: Ideal for scheduled, enterprise-grade ETL/ELT batch orchestration.
+  * **Azure Logic Apps**: Useful for quick low-code connections to third-party sources.
+* **Buffering**: **Azure Service Bus Queue** or **Azure Queue Storage** receives micro-batches (100–200 document IDs) to decouple ingestion from processing and smooth out load spikes.
+* **Worker Execution**:
+  * **Azure Functions**: Auto-scales based on queue depth for lightweight processing.
+  * **Azure Container Apps / AKS**: Best for heavy compute workloads, complex dependencies (like custom Python OCR libraries), or GPU acceleration.
 
-6. Failure Handling
-Failures are expected — design for them
-Idempotent pipeline stages
-Retry with exponential backoff
-Dead-Letter Queue (DLQ) for:
-Corrupt PDFs
-OCR failures
-Persist processing state:
-INGESTED → PROCESSED → EMBEDDED → INDEXED
-➡️ Pipeline resumes from last successful step
+## 3. PDF Processing
+* **Text & Layout Extraction**:
+  * **Azure AI Document Intelligence** (formerly Form Recognizer): Managed service providing OCR, layout detection, table extraction, and fallbacks for scanned PDFs.
+  * **Custom Python Libraries**: Running `pdfplumber`, `PyPDF`, or `Apache Tika` on containerized workers for standard digital PDFs to optimize costs.
+* **Normalization & Chunking**: Cleans text (stripping headers, footers, page numbers, and bad encodings) and partitions content into semantic or fixed-token chunks.
 
-7. Monitoring & Observability
-Metrics:
-PDFs/hour
-Failure rate
-Duplicate rate
-Logs per document ID
-Alerts if SLA breached
+## 4. Deduplication Strategy
+* **Document-Level**: Checks the SHA-256 hash of incoming PDFs against Cosmos DB/SQL DB. If matched, processing skips immediately.
+* **Chunk-Level**: Hashes normalized text chunks and verifies them against the metadata store prior to calling embedding models, avoiding redundant vector embedding API costs.
+
+## 5. Embedding & Indexing
+* **Embedding Generation**: **Azure OpenAI Service** generates vector embeddings via models like `text-embedding-3-small` or `text-embedding-3-large`. Alternatively, self-hosted Hugging Face models can run on **Azure Machine Learning** endpoints.
+* **Vector & Metadata Stores**:
+  * **Azure AI Search**: Fully managed search engine providing hybrid search (vector + BM25 keyword search), semantic ranking, and built-in vector indexing.
+  * **Azure Cosmos DB (Vector Search)** or **Azure Database for PostgreSQL (with `pgvector`)**: Stores raw chunk text alongside metadata and vector embeddings in a single database.
+
+## 6. Failure Handling & State Management
+* **State Tracking**: **Cosmos DB** or **Azure SQL** tracks the lifecycle state (`INGESTED` $\rightarrow$ `PROCESSED` $\rightarrow$ `EMBEDDED` $\rightarrow$ `INDEXED`). If a worker fails, the job resumes from the last completed state rather than re-processing from scratch.
+* **Dead-Letter Queue (DLQ)**: **Azure Service Bus DLQ** catches permanently failed messages (corrupt PDFs, malformed text, max retry limits reached) for manual inspection.
+* **Retries**: Built-in exponential backoff handles transient API rate limits (e.g., Azure OpenAI $429$ Too Many Requests) and brief network outages.
+
+## 7. Monitoring & Observability
+* **Application Insights & Azure Monitor**: Collects distributed traces using `doc_id` to track end-to-end latency across functions, containers, and database calls.
+* **Log Analytics & Dashboards**: Tracks operational metrics such as PDFs processed per hour, duplicate hit rates, DLQ count, and embedding token costs.
+* **Alerts**: Fires automated notifications (via Action Groups / Slack / Email) if processing falls below SLA thresholds or failure rates spike above predefined limits.
