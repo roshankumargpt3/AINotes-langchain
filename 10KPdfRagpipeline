@@ -1,0 +1,62 @@
+1. Ingestion Layer
+PDFs uploaded to Object Storage (S3 / GCS / Azure Blob)
+Metadata stored:
+doc_id
+source
+upload_time
+checksum (SHA-256)
+➡️ Enables deduplication & retries
+
+2. Orchestration & Scaling
+Use workflow orchestrator
+Airflow / Temporal / Step Functions
+Batch PDFs into micro-batches (e.g., 100–200 docs)
+Parallel workers for:
+Text extraction
+Chunking
+Embedding
+✔ Handles 10k/day without overloading downstream systems
+
+3. PDF Processing
+Extract text using:
+PDFPlumber / Tika / OCR (fallback)
+Normalize text:
+Remove headers/footers
+Fix encoding
+Chunk text (semantic or token-based)
+
+4. Deduplication Strategy
+Two layers of deduplication:
+A. Document-level
+Hash full PDF content
+If hash already exists → skip ingestion
+B. Chunk-level
+Hash normalized chunk text
+Prevent duplicate embeddings across documents
+➡️ Saves storage + embedding cost
+
+5. Embedding & Indexing
+Generate embeddings (OpenAI / HF / Cohere)
+Store in:
+Vector DB (Pinecone / Weaviate / FAISS)
+Store raw text + metadata in:
+SQL / NoSQL store
+
+6. Failure Handling
+Failures are expected — design for them
+Idempotent pipeline stages
+Retry with exponential backoff
+Dead-Letter Queue (DLQ) for:
+Corrupt PDFs
+OCR failures
+Persist processing state:
+INGESTED → PROCESSED → EMBEDDED → INDEXED
+➡️ Pipeline resumes from last successful step
+
+7. Monitoring & Observability
+Metrics:
+PDFs/hour
+Failure rate
+Duplicate rate
+Logs per document ID
+Alerts if SLA breached
